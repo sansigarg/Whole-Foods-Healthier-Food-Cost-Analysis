@@ -1,0 +1,123 @@
+USE fmban_sql_analysis;
+
+
+-- Query for insight 1
+-- here we wanted to understand whether the Whole Food asssortment
+-- offers bulk buying options. To understand bulk buying, we tried to find
+-- the number of days in which an average US family will be able to finish the product
+-- when consuming 1 serving of the product per day per person. 
+-- We then compare the number of days which will take to finish the product.
+-- If the products don't last atleast half a week (>3 days) then it is 
+-- assumed that the category doesn't have bulk buying options.
+-- This analysis is done at a category level.
+
+SELECT	new_category, 
+-- calculating average number of servings per category
+
+	ROUND(AVG(number_of_servings),0) AS mean_servings_per_category,
+ -- calculating the number of days per category for consumption of the above servings   
+
+    ROUND(ROUND(AVG(number_of_servings),0)/3.15,0) AS no_of_days_consumption # considering 3.15 as average US family size
+  FROM	(
+			SELECT	*
+						,
+					CASE 
+						WHEN category = 'NULL' 
+						THEN 'Snacks &Chips' 
+						ELSE category 
+					END AS corrected_category,
+				
+      -- calculating the number of servings per product          
+					CASE 
+					 WHEN category = 'Beer' OR category = 'Wine'
+							   THEN ROUND(totalsize/quantity,0)
+					 WHEN category = 'Beverages' 
+							   THEN servingsizeunits
+					 WHEN category = 'Bread Rolls & Bakery' AND totalsecondarysize= 0 
+							   THEN 0  
+                     WHEN category = 'Bread Rolls & Bakery' 
+							   THEN ROUND(totalsecondarysize/servingsize,0)
+					 WHEN category = 'Dairy and Eggs' 
+							   THEN ROUND(totalsize/servingsize,0)
+					 WHEN  ID =116
+							THEN 	ROUND(totalsecondarysize/servingsize,0)
+                     WHEN category = 'Desserts' 
+						  	  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(totalsize/servingsize,0)
+					 WHEN category = 'Desserts' 
+						  	  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(totalsecondarysize/servingsize,0)
+					 WHEN category = 'Frozen Foods' 
+						  AND servingsizeunits NOT LIKE 'oz' 
+						  AND servingsizeunits IS NOT NULL
+							   THEN ROUND(totalsecondarysize/servingsize,0)          
+					 WHEN category = 'Frozen Foods' 
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(totalsecondarysize/servingsize/28.3,0) # 1oz = 28.3 grams
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits NOT LIKE 'grams' AND totalsizeunits IS NOT NULL
+							   THEN ROUND(totalsize/servingsize,0)
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits LIKE 'grams'
+							   THEN ROUND(totalsecondarysize/servingsize,0)
+					 WHEN category = 'NULL'
+							   THEN ROUND(totalsize/servingsize,0)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(totalsize/servingsize,0)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(totalsecondarysize/servingsize,0)   
+					 WHEN category = 'Prepared Foods' 
+						  AND (servingsizeunits != totalsizeunits OR servingsizeunits != secondarysizeunits)
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(totalsize*16/servingsize,0)               
+					 WHEN category = 'Produce' 
+							   THEN ROUND(totalsize/servingsize,0)          
+					 WHEN category = 'supplements'
+							   THEN ROUND(totalsize/servingsize,0)  
+					      
+				END AS number_of_servings
+              
+		
+        FROM	fmban_data
+			) AS SUB_QUERY
+ 
+ GROUP BY new_category;
+
+
+-- Query for insight 2 and 3
+-- here we want to check the number of products in  
+-- each category as a percent of all the products in each category for each of the 
+-- special diet. This will help understand if there is a gap in assortment for any catgeory 
+-- for any diet and whether that gap is necessary to fill basis the trends/guidelines
+-- in the food and beverages world
+SELECT 
+-- Correcting the category to change 			
+			CASE 
+				WHEN category = 'NULL' 
+                THEN 'Snacks & Chips' 
+                ELSE category 
+			END AS corrected_category,
+-- Total number of products in each category
+			COUNT(ID) AS no_of_products,
+			
+-- %age of products with the respective diet in each category	
+						ROUND(SUM(vegan)/COUNT(ID)*100,0) AS percent_vegan_products,
+						ROUND(SUM(glutenfree)/COUNT(ID)*100,0) AS percent_glutenfree_products ,			
+						ROUND(SUM(ketofriendly)/COUNT(ID)*100,0) AS percent_ketofriendly_products,			
+						ROUND(SUM(vegetarian)/COUNT(ID)*100,0) AS percent_vegetarian_products,			
+						ROUND(SUM(organic)/COUNT(ID)*100,0) AS percent_organic_products,			
+						ROUND(SUM(dairyfree)/COUNT(ID)*100,0) AS percent_dairyfree_products,			
+						ROUND(SUM(sugarconscious)/COUNT(ID)*100,0) AS percent_sugarconscious_products,
+						ROUND(SUM(paleofriendly)/COUNT(ID)*100,0) AS percent_paleofriendly_products,
+						ROUND(SUM(wholefoodsdiet)/COUNT(ID)*100,0) AS percent_wholefoodsdiet_products,			
+						ROUND(SUM(lowsodium)/COUNT(ID)*100,0) AS percent_lowsodium_products,
+						ROUND(SUM(kosher)/COUNT(ID)*100,0) AS percent_kosher_products,
+						ROUND(SUM(lowfat)/COUNT(ID)*100,0) AS percent_lowfat_products,
+						ROUND(SUM(engine2)/COUNT(ID)*100,0) AS percent_engine2_products
+
+			FROM fmban_data
+			GROUP BY corrected_category;
+
+

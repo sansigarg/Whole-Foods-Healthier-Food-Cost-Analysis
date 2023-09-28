@@ -1,0 +1,1061 @@
+USE fmban_sql_analysis;
+
+-- Query with t-test result plugged in. This query only shows the means and t-test results
+-- for overall data and categorywise data
+-- Post this query, different queries that were run to arrive at the final results 
+-- have been shown. 
+
+SELECT 	"Overall" AS Category,
+	   	 Healthy_Unhealthy,
+	     ROUND(AVG(price_per_serving),2)  AS mean_price_per_serving,
+	     p_value, 
+       CASE
+					WHEN p_value>= 0.05 THEN 'HEALTHIER FOODS ARE COSTLIER'
+					WHEN p_value<0.05 THEN 'HEALTHIER FOODS ARE CHEAPER'
+					ELSE 'DATA INSUFFICIENT'
+				END AS t_test_result	         
+FROM
+	
+-- creating a subquery to define health and unhealthy food
+-- and calculating price_per serving		
+		(SELECT
+      
+      -- Changing the NULL category name to 'Snacks & Chips'
+      
+          CASE 
+				WHEN category = 'NULL' 
+                THEN 'Snacks & Chips' 
+                ELSE category 
+			END AS corrected_category, 
+		    
+            product,
+
+            0.18 AS p_value,
+		     
+		-- Calculating the number of special diets in a particular product
+		-- and aliasing it as total_special_diet
+		-- considering only the healthy diets
+		     
+		     organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2 
+		     AS total_special_diet,
+		     
+		-- case statement to define healthy/unhealthy
+		-- Any product with 1 or more of total_special_diet is defined to be healthy
+				
+				CASE
+					WHEN (organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2)  <1 THEN 'Unhealthy'
+					ELSE 'Healthy'
+				  END AS Healthy_Unhealthy,  
+			
+           	CASE 
+					 WHEN price = 0
+					 			 THEN 0
+					 WHEN servingsize = 0 
+							   THEN 0  			 
+					 WHEN category = 'Beer' 
+							   THEN priceperunit
+					 WHEN category = 'Beverages' 
+							   THEN ROUND(price/100/servingsizeunits,2)
+					 WHEN category = 'Bread Rolls & Bakery' AND price!= 0 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Dairy and Eggs' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID =116 
+							   THEN 0
+				   WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits NOT LIKE 'oz' 
+						  AND servingsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)          
+					 WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize/28.3)),2) # 1oz = 28.3 grams
+					 WHEN category = 'Frozen Foods' 
+						  AND (servingsizeunits IS NULL
+						  OR ID =178)  
+							   THEN 0   			 
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits NOT LIKE 'grams' AND totalsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits LIKE 'grams'
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'NULL'
+							   THEN ROUND(price/((totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)   
+					 WHEN category = 'Prepared Foods' 
+						  AND (servingsizeunits != totalsizeunits OR servingsizeunits != secondarysizeunits)
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsize*16/servingsize)),2)  # 1lb = 16 oz             
+					 WHEN category = 'Produce' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)          
+					 WHEN category = 'supplements'
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)  
+					 WHEN category = 'Wine' 
+							   THEN priceperunit        
+				END AS price_per_serving
+		             
+		FROM fmban_data
+
+			) AS sub_query_classification
+WHERE price_per_serving !=0
+GROUP BY Category, Healthy_Unhealthy, p_value
+
+UNION
+
+-- calcuating the mean for both groups for each category
+
+SELECT corrected_category,
+	   	 Healthy_Unhealthy,
+	     ROUND(AVG(price_per_serving),2) AS mean_price_ser, 
+         p_value,
+	     CASE
+					WHEN p_value = 'NA' THEN 'DATA INSUFFICIENT'
+					WHEN p_value>= 0.05 THEN 'HEALTHIER FOODS ARE COSTLIER'
+					WHEN p_value<0.05 THEN 'HEALTHIER FOODS ARE CHEAPER'
+					
+				END AS Result	
+            
+        
+FROM
+	
+-- creating a subquery to define health and unhealthy food
+-- and calculating price_per serving		
+		(SELECT
+      
+      -- Changing the NULL category name to 'Snacks & Chips'
+      
+      CASE 
+				WHEN category = 'NULL' 
+                THEN 'Snacks & Chips' 
+                ELSE category 
+			END AS corrected_category, 
+		    
+          	     
+		-- Calculating the number of special diets in a particular product
+		-- and aliasing it as total_special_diet
+		-- considering only the healthy diets
+		     
+		     organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2 
+		     AS total_special_diet,
+		     
+		-- case statement to define healthy/unhealthy
+		-- Any product with 1 or more of total_special_diet is defined to be healthy
+				
+				CASE
+					WHEN (organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2)  <1 THEN 'Unhealthy'
+					ELSE 'Healthy'
+				  END AS Healthy_Unhealthy,  
+
+				CASE 
+					WHEN category = 'Beer' THEN 0.41
+					WHEN category = 'Beverages' THEN 'NA'
+					WHEN category = 'Bread Rolls & Bakery' THEN 0.41
+					WHEN category = 'Dairy and Eggs' THEN 'NA' 
+					WHEN category = 'Desserts' THEN 0.43
+					WHEN category = 'Frozen Foods' THEN 0.03
+					WHEN category = 'Meat' THEN 'NA'
+					WHEN category = 'NULL' THEN 'NA'
+					WHEN category = 'Prepared Foods' THEN 0.01
+					WHEN category = 'Produce' THEN 'NA'
+					WHEN category = 'supplements' THEN 0.00
+					WHEN category = 'Wine' THEN 0.03
+				END AS p_value,
+                
+			CASE 
+					 WHEN price = 0
+					 			 THEN 0
+					 WHEN servingsize = 0 
+							   THEN 0  			 
+					 WHEN category = 'Beer' 
+							   THEN priceperunit
+					 WHEN category = 'Beverages' 
+							   THEN ROUND(price/100/servingsizeunits,2)
+					 WHEN category = 'Bread Rolls & Bakery' AND price!= 0 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Dairy and Eggs' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID =116 
+							   THEN 0
+				   WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits NOT LIKE 'oz' 
+						  AND servingsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)          
+					 WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize/28.3)),2) # 1oz = 28.3 grams
+					 WHEN category = 'Frozen Foods' 
+						  AND (servingsizeunits IS NULL
+						  OR ID =178)  
+							   THEN 0   			 
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits NOT LIKE 'grams' AND totalsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits LIKE 'grams'
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'NULL'
+							   THEN ROUND(price/((totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)   
+					 WHEN category = 'Prepared Foods' 
+						  AND (servingsizeunits != totalsizeunits OR servingsizeunits != secondarysizeunits)
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsize*16/servingsize)),2)  # 1lb = 16 oz             
+					 WHEN category = 'Produce' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)          
+					 WHEN category = 'supplements'
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)  
+					 WHEN category = 'Wine' 
+							   THEN priceperunit        
+				END AS price_per_serving
+			
+        
+		             
+		FROM fmban_data
+
+			) AS sub_query_classification
+WHERE price_per_serving !=0
+GROUP BY corrected_category, Healthy_Unhealthy, p_value 
+
+;
+
+
+-- Deriving price per serving for each product and 
+-- total number of special diets to define 
+-- healthy and unhealthy foods
+
+SELECT corrected_category,
+	   	 Healthy_Unhealthy,
+	     price_per_serving     
+
+FROM
+	
+-- creating a subquery to define health and unhealthy food
+-- and calculating price_per serving		
+		(SELECT
+      
+      -- Changing the NULL category name to 'Snacks & Chips'
+      
+          CASE 
+				WHEN category = 'NULL' 
+                THEN 'Snacks & Chips' 
+                ELSE category 
+			END AS corrected_category, 
+		    
+            product,
+		     
+		-- Calculating the number of special diets in a particular product
+		-- and aliasing it as total_special_diet
+		-- considering only the healthy diets
+		     
+		     organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2 
+		     AS total_special_diet,
+		     
+		-- case statement to define healthy/unhealthy
+		-- Any product with 1 or more of total_special_diet is defined to be healthy
+				
+				CASE
+					WHEN (organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2)  <1 THEN 'Unhealthy'
+					ELSE 'Healthy'
+				  END AS Healthy_Unhealthy,  
+			
+            caloriesperserving,
+
+		-- Case statement to create a new column of price per serving
+		-- This will help in doing a like to like comparison across products
+		-- We will derive the correaltion between price per serving and
+		-- calories/carbs per serving and the special diets to understand 
+		-- whether healthier foods cost less
+				CASE 
+					 WHEN price = 0
+					 			 THEN 0
+					 WHEN servingsize = 0 
+							   THEN 0  			 
+					 WHEN category = 'Beer' 
+							   THEN priceperunit
+					 WHEN category = 'Beverages' 
+							   THEN ROUND(price/100/servingsizeunits,2)
+					 WHEN category = 'Bread Rolls & Bakery' AND price!= 0 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Dairy and Eggs' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+				-- for desserts where serving size unit matches total size unit in some cases
+				-- and in some cases matches total secondary size     
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID =116 
+							   THEN 0
+				   WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits NOT LIKE 'oz' 
+						  AND servingsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)          
+					 WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize/28.3)),2) # 1oz = 28.3 grams
+					 WHEN category = 'Frozen Foods' 
+						  AND (servingsizeunits IS NULL
+						  OR ID =178)  
+							   THEN 0   			 
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits NOT LIKE 'grams' AND totalsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits LIKE 'grams'
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'NULL'
+							   THEN ROUND(price/((totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)   
+					 WHEN category = 'Prepared Foods' 
+						  AND (servingsizeunits != totalsizeunits OR servingsizeunits != secondarysizeunits)
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsize*16/servingsize)),2)  # 1lb = 16 oz             
+					 WHEN category = 'Produce' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)          
+					 WHEN category = 'supplements'
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)  
+					 WHEN category = 'Wine' 
+							   THEN priceperunit        
+				END AS price_per_serving
+		             
+		FROM fmban_data
+
+			) AS sub_query_classification
+
+;
+
+-- -----------------------------------------------------------------------------------------
+-- Extracting price per serving for Healthy foods
+-- for t-test analysis in Excel
+
+
+SELECT Healthy_Unhealthy,
+	     price_per_serving     
+
+FROM
+	
+-- creating a subquery to define health and unhealthy food
+-- and calculating price_per serving		
+		(SELECT
+      
+      -- Changing the NULL category name to 'Snacks & Chips'
+      
+          CASE 
+				WHEN category = 'NULL' 
+                THEN 'Snacks & Chips' 
+                ELSE category 
+			END AS corrected_category, 
+		    
+            product,
+		     
+		-- Calculating the number of special diets in a particular product
+		-- and aliasing it as total_special_diet
+		-- considering only the healthy diets
+		     
+		     organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2 
+		     AS total_special_diet,
+		     
+		-- case statement to define healthy/unhealthy
+		-- Any product with 1 or more of total_special_diet is defined to be healthy
+				
+				CASE
+					WHEN (organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2)  <1 THEN 'Unhealthy'
+					ELSE 'Healthy'
+				  END AS Healthy_Unhealthy,  
+			
+            caloriesperserving,
+
+		-- Case statement to create a new column of price per serving
+		-- This will help in doing a like to like comparison across products
+		-- We will derive the correaltion between price per serving and
+		-- calories/carbs per serving and the special diets to understand 
+		-- whether healthier foods cost less
+				CASE 
+					 WHEN price = 0
+					 			 THEN 0
+					 WHEN servingsize = 0 
+							   THEN 0  			 
+					 WHEN category = 'Beer' 
+							   THEN priceperunit
+					 WHEN category = 'Beverages' 
+							   THEN ROUND(price/100/servingsizeunits,2)
+					 WHEN category = 'Bread Rolls & Bakery' AND price!= 0 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Dairy and Eggs' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+				-- for desserts where serving size unit matches total size unit in some cases
+				-- and in some cases matches total secondary size     
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID =116 
+							   THEN 0
+				   WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits NOT LIKE 'oz' 
+						  AND servingsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)          
+					 WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize/28.3)),2) # 1oz = 28.3 grams
+					 WHEN category = 'Frozen Foods' 
+						  AND (servingsizeunits IS NULL
+						  OR ID =178)  
+							   THEN 0   			 
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits NOT LIKE 'grams' AND totalsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits LIKE 'grams'
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'NULL'
+							   THEN ROUND(price/((totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)   
+					 WHEN category = 'Prepared Foods' 
+						  AND (servingsizeunits != totalsizeunits OR servingsizeunits != secondarysizeunits)
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsize*16/servingsize)),2)  # 1lb = 16 oz             
+					 WHEN category = 'Produce' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)          
+					 WHEN category = 'supplements'
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)  
+					 WHEN category = 'Wine' 
+							   THEN priceperunit        
+				END AS price_per_serving
+		             
+		FROM fmban_data
+
+			) AS sub_query_classification
+
+WHERE Healthy_Unhealthy LIKE 'Healthy' 
+;
+
+
+-- Extracting price per serving for Unhealthy foods
+-- for t-test analysis in Excel
+
+SELECT Healthy_Unhealthy,
+	     price_per_serving     
+
+FROM
+	
+-- creating a subquery to define health and unhealthy food
+-- and calculating price_per serving		
+		(SELECT
+      
+      -- Changing the NULL category name to 'Snacks & Chips'
+      
+          CASE 
+				WHEN category = 'NULL' 
+                THEN 'Snacks & Chips' 
+                ELSE category 
+			END AS corrected_category, 
+		    
+            product,
+		     
+		-- Calculating the number of special diets in a particular product
+		-- and aliasing it as total_special_diet
+		-- considering only the healthy diets
+		     
+		     organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2 
+		     AS total_special_diet,
+		     
+		-- case statement to define healthy/unhealthy
+		-- Any product with 1 or more of total_special_diet is defined to be healthy
+				
+				CASE
+					WHEN (organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2)  <1 THEN 'Unhealthy'
+					ELSE 'Healthy'
+				  END AS Healthy_Unhealthy,  
+			
+            caloriesperserving,
+
+		-- Case statement to create a new column of price per serving
+		-- This will help in doing a like to like comparison across products
+		-- We will derive the correaltion between price per serving and
+		-- calories/carbs per serving and the special diets to understand 
+		-- whether healthier foods cost less
+				CASE 
+					 WHEN price = 0
+					 			 THEN 0
+					 WHEN servingsize = 0 
+							   THEN 0  			 
+					 WHEN category = 'Beer' 
+							   THEN priceperunit
+					 WHEN category = 'Beverages' 
+							   THEN ROUND(price/100/servingsizeunits,2)
+					 WHEN category = 'Bread Rolls & Bakery' AND price!= 0 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Dairy and Eggs' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+				-- for desserts where serving size unit matches total size unit in some cases
+				-- and in some cases matches total secondary size     
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID =116 
+							   THEN 0
+				   WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits NOT LIKE 'oz' 
+						  AND servingsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)          
+					 WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize/28.3)),2) # 1oz = 28.3 grams
+					 WHEN category = 'Frozen Foods' 
+						  AND (servingsizeunits IS NULL
+						  OR ID =178)  
+							   THEN 0   			 
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits NOT LIKE 'grams' AND totalsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits LIKE 'grams'
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'NULL'
+							   THEN ROUND(price/((totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)   
+					 WHEN category = 'Prepared Foods' 
+						  AND (servingsizeunits != totalsizeunits OR servingsizeunits != secondarysizeunits)
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsize*16/servingsize)),2)  # 1lb = 16 oz             
+					 WHEN category = 'Produce' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)          
+					 WHEN category = 'supplements'
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)  
+					 WHEN category = 'Wine' 
+							   THEN priceperunit        
+				END AS price_per_serving
+		             
+		FROM fmban_data
+
+			) AS sub_query_classification
+
+WHERE Healthy_Unhealthy LIKE 'Unhealthy' 
+;
+
+
+-- ---------------------------------------------------------------------------------
+
+-- Extracting price per serving for Healthy foods for each category
+-- for t-test analysis in Excel
+
+
+SELECT corrected_category, Healthy_Unhealthy,
+	     price_per_serving     
+
+FROM
+	
+-- creating a subquery to define health and unhealthy food
+-- and calculating price_per serving		
+		(SELECT
+      
+      -- Changing the NULL category name to 'Snacks & Chips'
+      
+          CASE 
+				WHEN category = 'NULL' 
+                THEN 'Snacks & Chips' 
+                ELSE category 
+			END AS corrected_category, 
+		    
+            product,
+		     
+		-- Calculating the number of special diets in a particular product
+		-- and aliasing it as total_special_diet
+		-- considering only the healthy diets
+		     
+		     organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2 
+		     AS total_special_diet,
+		     
+		-- case statement to define healthy/unhealthy
+		-- Any product with 1 or more of total_special_diet is defined to be healthy
+				
+				CASE
+					WHEN (organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2)  <1 THEN 'Unhealthy'
+					ELSE 'Healthy'
+				  END AS Healthy_Unhealthy,  
+			
+            caloriesperserving,
+
+		-- Case statement to create a new column of price per serving
+		-- This will help in doing a like to like comparison across products
+		-- We will derive the correaltion between price per serving and
+		-- calories/carbs per serving and the special diets to understand 
+		-- whether healthier foods cost less
+				CASE 
+					 WHEN price = 0
+					 			 THEN 0
+					 WHEN servingsize = 0 
+							   THEN 0  			 
+					 WHEN category = 'Beer' 
+							   THEN priceperunit
+					 WHEN category = 'Beverages' 
+							   THEN ROUND(price/100/servingsizeunits,2)
+					 WHEN category = 'Bread Rolls & Bakery' AND price!= 0 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Dairy and Eggs' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+				-- for desserts where serving size unit matches total size unit in some cases
+				-- and in some cases matches total secondary size     
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID =116 
+							   THEN 0
+				   WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits NOT LIKE 'oz' 
+						  AND servingsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)          
+					 WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize/28.3)),2) # 1oz = 28.3 grams
+					 WHEN category = 'Frozen Foods' 
+						  AND (servingsizeunits IS NULL
+						  OR ID =178)  
+							   THEN 0   			 
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits NOT LIKE 'grams' AND totalsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits LIKE 'grams'
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'NULL'
+							   THEN ROUND(price/((totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)   
+					 WHEN category = 'Prepared Foods' 
+						  AND (servingsizeunits != totalsizeunits OR servingsizeunits != secondarysizeunits)
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsize*16/servingsize)),2)  # 1lb = 16 oz             
+					 WHEN category = 'Produce' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)          
+					 WHEN category = 'supplements'
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)  
+					 WHEN category = 'Wine' 
+							   THEN priceperunit        
+				END AS price_per_serving
+		             
+		FROM fmban_data
+
+			) AS sub_query_classification
+
+WHERE Healthy_Unhealthy LIKE 'Healthy' 
+;
+
+-- Extracting price per serving for Unhealthy foods for each category
+-- for t-test analysis in Excel
+
+SELECT corrected_category, Healthy_Unhealthy,
+	     price_per_serving     
+
+FROM
+	
+-- creating a subquery to define health and unhealthy food
+-- and calculating price_per serving		
+		(SELECT
+      
+      -- Changing the NULL category name to 'Snacks & Chips'
+      
+          CASE 
+				WHEN category = 'NULL' 
+                THEN 'Snacks & Chips' 
+                ELSE category 
+			END AS corrected_category, 
+		    
+            product,
+		     
+		-- Calculating the number of special diets in a particular product
+		-- and aliasing it as total_special_diet
+		-- considering only the healthy diets
+		     
+		     organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2 
+		     AS total_special_diet,
+		     
+		-- case statement to define healthy/unhealthy
+		-- Any product with 1 or more of total_special_diet is defined to be healthy
+				
+				CASE
+					WHEN (organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2)  <1 THEN 'Unhealthy'
+					ELSE 'Healthy'
+				  END AS Healthy_Unhealthy,  
+			
+            caloriesperserving,
+
+		-- Case statement to create a new column of price per serving
+		-- This will help in doing a like to like comparison across products
+		-- We will derive the correaltion between price per serving and
+		-- calories/carbs per serving and the special diets to understand 
+		-- whether healthier foods cost less
+				CASE 
+					 WHEN price = 0
+					 			 THEN 0
+					 WHEN servingsize = 0 
+							   THEN 0  			 
+					 WHEN category = 'Beer' 
+							   THEN priceperunit
+					 WHEN category = 'Beverages' 
+							   THEN ROUND(price/100/servingsizeunits,2)
+					 WHEN category = 'Bread Rolls & Bakery' AND price!= 0 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Dairy and Eggs' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+				-- for desserts where serving size unit matches total size unit in some cases
+				-- and in some cases matches total secondary size     
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID =116 
+							   THEN 0
+				   WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits NOT LIKE 'oz' 
+						  AND servingsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)          
+					 WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize/28.3)),2) # 1oz = 28.3 grams
+					 WHEN category = 'Frozen Foods' 
+						  AND (servingsizeunits IS NULL
+						  OR ID =178)  
+							   THEN 0   			 
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits NOT LIKE 'grams' AND totalsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits LIKE 'grams'
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'NULL'
+							   THEN ROUND(price/((totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)   
+					 WHEN category = 'Prepared Foods' 
+						  AND (servingsizeunits != totalsizeunits OR servingsizeunits != secondarysizeunits)
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsize*16/servingsize)),2)  # 1lb = 16 oz             
+					 WHEN category = 'Produce' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)          
+					 WHEN category = 'supplements'
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)  
+					 WHEN category = 'Wine' 
+							   THEN priceperunit        
+				END AS price_per_serving
+		             
+		FROM fmban_data
+
+			) AS sub_query_classification
+
+WHERE Healthy_Unhealthy LIKE 'Unhealthy' 
+
+;
+
+-- -------------------------------------------------------------------------
+-- Calculating mean for healthy and unhealthy food groups
+-- for overall data and each category
+
+SELECT "Overall" AS Category,
+	   	 Healthy_Unhealthy,
+	     ROUND(AVG(price_per_serving),2)  AS mean_price_per_serving
+         
+FROM
+	
+-- creating a subquery to define health and unhealthy food
+-- and calculating price_per serving		
+		(SELECT
+      
+      -- Changing the NULL category name to 'Snacks & Chips'
+      
+          CASE 
+				WHEN category = 'NULL' 
+                THEN 'Snacks & Chips' 
+                ELSE category 
+			END AS corrected_category, 
+		    
+            product,
+		     
+		-- Calculating the number of special diets in a particular product
+		-- and aliasing it as total_special_diet
+		-- considering only the healthy diets
+		     
+		     organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2 
+		     AS total_special_diet,
+		     
+		-- case statement to define healthy/unhealthy
+		-- Any product with 1 or more of total_special_diet is defined to be healthy
+				
+				CASE
+					WHEN (organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2)  <1 THEN 'Unhealthy'
+					ELSE 'Healthy'
+				  END AS Healthy_Unhealthy,  
+			
+            caloriesperserving,
+
+			CASE 
+					 WHEN price = 0
+					 			 THEN 0
+					 WHEN servingsize = 0 
+							   THEN 0  			 
+					 WHEN category = 'Beer' 
+							   THEN priceperunit
+					 WHEN category = 'Beverages' 
+							   THEN ROUND(price/100/servingsizeunits,2)
+					 WHEN category = 'Bread Rolls & Bakery' AND price!= 0 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Dairy and Eggs' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID =116 
+							   THEN 0
+				   WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits NOT LIKE 'oz' 
+						  AND servingsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)          
+					 WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize/28.3)),2) # 1oz = 28.3 grams
+					 WHEN category = 'Frozen Foods' 
+						  AND (servingsizeunits IS NULL
+						  OR ID =178)  
+							   THEN 0   			 
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits NOT LIKE 'grams' AND totalsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits LIKE 'grams'
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'NULL'
+							   THEN ROUND(price/((totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)   
+					 WHEN category = 'Prepared Foods' 
+						  AND (servingsizeunits != totalsizeunits OR servingsizeunits != secondarysizeunits)
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsize*16/servingsize)),2)  # 1lb = 16 oz             
+					 WHEN category = 'Produce' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)          
+					 WHEN category = 'supplements'
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)  
+					 WHEN category = 'Wine' 
+							   THEN priceperunit        
+				END AS price_per_serving
+		             
+		FROM fmban_data
+
+			) AS sub_query_classification
+WHERE price_per_serving !=0
+GROUP BY Healthy_Unhealthy
+
+UNION
+
+-- calcuating the mean for both groups for each category
+
+SELECT corrected_category,
+	   	 Healthy_Unhealthy,
+	     ROUND(AVG(price_per_serving),2)
+        
+FROM
+	
+-- creating a subquery to define health and unhealthy food
+-- and calculating price_per serving		
+		(SELECT
+      
+      -- Changing the NULL category name to 'Snacks & Chips'
+      
+      CASE 
+				WHEN category = 'NULL' 
+                THEN 'Snacks & Chips' 
+                ELSE category 
+			END AS corrected_category, 
+		    
+            product,
+		     
+		-- Calculating the number of special diets in a particular product
+		-- and aliasing it as total_special_diet
+		-- considering only the healthy diets
+		     
+		     organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2 
+		     AS total_special_diet,
+		     
+		-- case statement to define healthy/unhealthy
+		-- Any product with 1 or more of total_special_diet is defined to be healthy
+				
+				CASE
+					WHEN (organic + sugarconscious + wholefoodsdiet + lowsodium + lowfat + engine2)  <1 THEN 'Unhealthy'
+					ELSE 'Healthy'
+				  END AS Healthy_Unhealthy,  
+			
+        CASE 
+					 WHEN price = 0
+					 			 THEN 0
+					 WHEN servingsize = 0 
+							   THEN 0  			 
+					 WHEN category = 'Beer' 
+							   THEN priceperunit
+					 WHEN category = 'Beverages' 
+							   THEN ROUND(price/100/servingsizeunits,2)
+					 WHEN category = 'Bread Rolls & Bakery' AND price!= 0 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Dairy and Eggs' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID !=116 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'Desserts' 
+						  AND ID =116 
+							   THEN 0
+				   WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits NOT LIKE 'oz' 
+						  AND servingsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)          
+					 WHEN category = 'Frozen Foods' 
+						  AND ID !=178 
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize/28.3)),2) # 1oz = 28.3 grams
+					 WHEN category = 'Frozen Foods' 
+						  AND (servingsizeunits IS NULL
+						  OR ID =178)  
+							   THEN 0   			 
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits NOT LIKE 'grams' AND totalsizeunits IS NOT NULL
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Meat' 
+						  AND servingsizeunits LIKE 'grams'
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)
+					 WHEN category = 'NULL'
+							   THEN ROUND(price/((totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = totalsizeunits
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)
+					 WHEN category = 'Prepared Foods' 
+						  AND servingsizeunits = secondarysizeunits
+							   THEN ROUND(price/(100*(totalsecondarysize/servingsize)),2)   
+					 WHEN category = 'Prepared Foods' 
+						  AND (servingsizeunits != totalsizeunits OR servingsizeunits != secondarysizeunits)
+						  AND servingsizeunits LIKE 'oz' 
+							   THEN ROUND(price/(100*(totalsize*16/servingsize)),2)  # 1lb = 16 oz             
+					 WHEN category = 'Produce' 
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)          
+					 WHEN category = 'supplements'
+							   THEN ROUND(price/(100*(totalsize/servingsize)),2)  
+					 WHEN category = 'Wine' 
+							   THEN priceperunit        
+				END AS price_per_serving
+		             
+		FROM fmban_data
+
+			) AS sub_query_classification
+WHERE price_per_serving !=0
+GROUP BY corrected_category, Healthy_Unhealthy
+ORDER BY Category, Healthy_Unhealthy
+;
